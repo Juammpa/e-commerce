@@ -18,6 +18,7 @@ public class ProductRequestDto {
     @NotBlank(message = "The name is mandatory")
     private String name;
 
+
     @NotNull(message = "The price is mandatory")
     private Double price;
 

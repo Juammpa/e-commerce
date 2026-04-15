@@ -41,7 +41,7 @@ public class CategoryService implements ICategoryService{
     public CategoryResponseDto updateCategory(Long id, CategoryRequestDto request) {
 
         Category category = categoryRepository.findById(id)
-                        .orElseThrow(() -> new EntityNotFoundException("Category not found"));
+                        .orElseThrow(() -> new EntityNotFoundException("Category with ID: " + id + " not found"));
 
         category.setName(request.getName());
         category.setDescription(request.getDescription());
