@@ -1,13 +1,11 @@
 package com.micompany.ecommerce.models.entities;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
 @Getter @Setter
 @AllArgsConstructor @NoArgsConstructor
+@Builder
 @Entity
 @Table(name= "products")
 public class Product {
@@ -18,7 +16,6 @@ public class Product {
 
     @Column(nullable = false, length = 100)
     private String name;
-    private String description;
 
     @Column(nullable = false)
     private Double price = 0.0;
