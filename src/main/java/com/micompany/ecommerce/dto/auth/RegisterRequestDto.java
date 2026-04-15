@@ -1,10 +1,7 @@
 package com.micompany.ecommerce.dto.auth;
 
 import com.micompany.ecommerce.models.enums.Rol;
-import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotEmpty;
-import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -22,7 +19,7 @@ public class RegisterRequestDto {
     @Size(min = 6, message = "Password must be at least 6 characters long")
     private String password;
 
-    @NotEmpty(message = "The role is mandatory")
+    @NotNull(message = "The role is mandatory")
     private Rol rol;
 
 
