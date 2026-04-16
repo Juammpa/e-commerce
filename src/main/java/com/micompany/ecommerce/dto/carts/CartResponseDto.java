@@ -1,19 +1,17 @@
 package com.micompany.ecommerce.dto.carts;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
 import java.util.List;
 
 @Getter @Setter
 @AllArgsConstructor
 @NoArgsConstructor
+@Builder
 public class CartResponseDto {
 
     private Long id;
     private List<CartItemResponseDto> items;
-    private Double total;   // Calculated
+    private Double total = 0.0;  // Calculated
 
 }
