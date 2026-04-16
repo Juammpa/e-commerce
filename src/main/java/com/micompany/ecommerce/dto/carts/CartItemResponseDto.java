@@ -1,13 +1,11 @@
 package com.micompany.ecommerce.dto.carts;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
 @Getter @Setter
 @AllArgsConstructor
 @NoArgsConstructor
+@Builder
 public class CartItemResponseDto {
 
     private Long id;
