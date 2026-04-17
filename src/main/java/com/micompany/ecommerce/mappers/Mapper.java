@@ -80,7 +80,7 @@ public class Mapper {
         OrderResponseDto response = new OrderResponseDto();
         response.setId(order.getId());
         response.setUserEmail(order.getUser().getEmail());
-        response.setCreatedAt(LocalDateTime.now());
+        response.setCreatedAt(order.getCreateAt());
         response.setStatus(order.getStatus().name());
 
         List<OrderItemResponseDto> itemDtos = order.getItems().stream().map(item -> {
@@ -108,6 +108,7 @@ public class Mapper {
 
         Order order = Order.builder()
                 .user(cart.getUser())
+                .createAt(LocalDateTime.now())
                 .status(Status.PENDING)
                 .build();
 

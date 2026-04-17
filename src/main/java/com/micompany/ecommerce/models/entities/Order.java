@@ -4,6 +4,7 @@ import com.micompany.ecommerce.models.enums.Status;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -25,6 +26,9 @@ public class Order {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Status status = Status.PENDING;
+
+    @Column(name = "created_at", updatable = false, nullable = false)
+    private LocalDateTime createAt = LocalDateTime.now();
 
     private Double total = 0.0;
 
