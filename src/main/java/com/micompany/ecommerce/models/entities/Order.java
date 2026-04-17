@@ -2,16 +2,14 @@ package com.micompany.ecommerce.models.entities;
 
 import com.micompany.ecommerce.models.enums.Status;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
 import java.util.ArrayList;
 import java.util.List;
 
 @Getter @Setter
 @AllArgsConstructor @NoArgsConstructor
+@Builder
 @Entity
 @Table(name = "orders")
 public class Order {
