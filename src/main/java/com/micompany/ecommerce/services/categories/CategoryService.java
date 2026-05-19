@@ -25,7 +25,7 @@ public class CategoryService implements ICategoryService{
 
     // 2. Create new category
     @Override
-    public CategoryResponseDto createCaegory(CategoryRequestDto request) {
+    public CategoryResponseDto createCategory(CategoryRequestDto request) {
 
         Category category = Category.builder()
                 .name(request.getName())

@@ -23,14 +23,14 @@ public class ProductService implements IProductService{
     private CategoryRepository categoryRepository;
 
     @Override
-    public List<ProductResponseDto> getList(Long id) {
+    public List<ProductResponseDto> getList(Long categoryId) {
 
-        if(id==null) {
+        if(categoryId==null) {
             return productRepository.findAll().stream().map(Mapper::toDTO).toList();
         }
 
         return productRepository.findAll().stream().map(Mapper::toDTO).
-                filter(p -> p.getId().equals(id)).toList();
+                filter(p -> p.getCategoryId().equals(categoryId)).toList();
 
     }
 
