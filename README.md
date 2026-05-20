@@ -2,6 +2,8 @@
 
 A RESTful e-commerce backend built with Java, Spring Boot, and Docker. Features JWT authentication with role-based access control, full CRUD operations, and a containerized setup ready to run with a single command.
 
+![CI](https://github.com/Juammpa/e-commerce/actions/workflows/maven.yml/badge.svg)
+
 ## 🚀 Tech Stack
 
 | Technology | Version |
