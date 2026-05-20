@@ -10,7 +10,7 @@ A RESTful e-commerce backend built with Java, Spring Boot, and Docker. Features 
 |---|---|
 | ☕ Java | 17 |
 | 🍃 Spring Boot | 4.0.5 |
-| 🔐 Spring Security + JWT | JJWT 0.11.5 |
+| 🔐 Spring Security + JWT | JWT 0.11.5 |
 | 🗄️ Spring Data JPA + Hibernate | latest |
 | 🐬 MySQL | 8.0 |
 | 🐳 Docker + Docker Compose | latest |
