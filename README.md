@@ -60,8 +60,7 @@ POST /api/auth/register
 ```json
 {
     "email": "user@email.com",
-    "password": "123456",
-    "rol": "CUSTOMER"
+    "password": "123456"
 }
 ```
 

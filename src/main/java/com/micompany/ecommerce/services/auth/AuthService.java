@@ -4,6 +4,7 @@ import com.micompany.ecommerce.dto.auth.AuthResponseDto;
 import com.micompany.ecommerce.dto.auth.LoginRegisterDto;
 import com.micompany.ecommerce.dto.auth.RegisterRequestDto;
 import com.micompany.ecommerce.models.entities.User;
+import com.micompany.ecommerce.models.enums.Rol;
 import com.micompany.ecommerce.repositories.UserRepository;
 import com.micompany.ecommerce.security.JwtService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,7 +38,7 @@ public class AuthService implements IAuthService{
         User user = new User();
         user.setEmail(request.getEmail());
         user.setPassword(passwordEncoder.encode(request.getPassword()));
-        user.setRol(request.getRol());
+        user.setRol(Rol.CUSTOMER);
 
         userRepository.save(user);
 
