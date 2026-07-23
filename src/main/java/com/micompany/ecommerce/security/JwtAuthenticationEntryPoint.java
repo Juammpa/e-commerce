@@ -1,6 +1,6 @@
 package com.micompany.ecommerce.security;
 
-import jakarta.servlet.ServletException;
+import com.micompany.ecommerce.exceptions.ErrorMessage;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -11,66 +11,61 @@ import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
-import java.time.Instant;
+import java.time.LocalDateTime;
 
 /*
- * Este componente se ejecuta cuando una petición intenta acceder
+ * Responde HTTP 401 cuando una petición intenta acceder
  * a un recurso protegido sin una autenticación válida.
  *
  * Ejemplos:
  *
- * - La petición no contiene JWT.
- * - El JWT está vencido.
- * - El JWT tiene una firma incorrecta.
- * - El JWT está mal formado.
- *
- * En todos esos casos corresponde responder:
- *
- * HTTP 401 Unauthorized
+ * - No se envió el token.
+ * - El token está vencido.
+ * - El token está mal formado.
+ * - La firma del token no es válida.
  */
 @Component
-public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
-
-    private final ObjectMapper objectMapper;
+@RequiredArgsConstructor
+public class JwtAuthenticationEntryPoint
+        implements AuthenticationEntryPoint {
 
     /*
-     * Spring Boot proporciona un ObjectMapper configurado.
-     *
-     * ObjectMapper convierte objetos Java a JSON.
+     * Convierte ErrorMessage a JSON.
      */
-    public JwtAuthenticationEntryPoint(ObjectMapper objectMapper) {
-        this.objectMapper = objectMapper;
-    }
+    private final ObjectMapper objectMapper;
 
     @Override
-    public void commence(HttpServletRequest request, HttpServletResponse response, AuthenticationException authException) throws IOException, ServletException {
+    public void commence(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            AuthenticationException authenticationException
+    ) throws IOException {
 
-        // Indicamos que la peticion no posee una autenticacion valida.
-        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-
-        // La respuesta sera enviada en formato JSON
-        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-
-        // Evita problemas al escribir caracteres especiales
-        response.setCharacterEncoding("UTF-8");
-
-        SecurityErrorResponse errorResponse =
-                new SecurityErrorResponse(
-                        Instant.now(),
-                        HttpServletResponse.SC_UNAUTHORIZED,
-                        "Unauthorized",
-                        "Authentication is required or the token is invalid",
-                        request.getRequestURI()
-                );
-
-        /*
-         * Convertimos SecurityErrorResponse a JSON y lo escribimos
-         * directamente en el cuerpo de la respuesta HTTP.
-         */
-        objectMapper.writeValue(
-                response.getOutputStream(),
-                errorResponse
+        // Código HTTP de autenticación requerida.
+        response.setStatus(
+                HttpServletResponse.SC_UNAUTHORIZED
         );
 
+        response.setContentType(
+                MediaType.APPLICATION_JSON_VALUE
+        );
+
+        response.setCharacterEncoding("UTF-8");
+
+        /*
+         * Utilizamos el mismo ErrorMessage que el resto de la API.
+         */
+        ErrorMessage errorMessage = new ErrorMessage(
+                HttpServletResponse.SC_UNAUTHORIZED,
+                "Unauthorized",
+                "Authentication is required or the token is invalid",
+                LocalDateTime.now(),
+                request.getRequestURI()
+        );
+
+        objectMapper.writeValue(
+                response.getOutputStream(),
+                errorMessage
+        );
     }
 }

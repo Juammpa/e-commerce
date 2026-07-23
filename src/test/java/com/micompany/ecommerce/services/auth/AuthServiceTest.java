@@ -3,6 +3,8 @@ package com.micompany.ecommerce.services.auth;
 import com.micompany.ecommerce.dto.auth.AuthResponseDto;
 import com.micompany.ecommerce.dto.auth.LoginRegisterDto;
 import com.micompany.ecommerce.dto.auth.RegisterRequestDto;
+import com.micompany.ecommerce.exceptions.EmailAlreadyExistsException;
+import com.micompany.ecommerce.exceptions.ResourceNotFoundException;
 import com.micompany.ecommerce.models.entities.User;
 import com.micompany.ecommerce.models.enums.Rol;
 import com.micompany.ecommerce.repositories.UserRepository;
@@ -81,9 +83,9 @@ class AuthServiceTest {
     void register_debeDarError_cuandoEmailYaExiste() {
 
         // Arrange: creamos un request con un email ya registrado.
-        RegisterRequestDto requestDto = new RegisterRequestDto();
-        requestDto.setEmail(email);
-        requestDto.setPassword(password);
+        RegisterRequestDto request = new RegisterRequestDto();
+        request.setEmail(email);
+        request.setPassword(password);
 
         /*
          * Simulamos que el repositorio encuentra un usuario
@@ -92,17 +94,15 @@ class AuthServiceTest {
         when(userRepository.findByEmail(email)).thenReturn(Optional.of(testUser));
 
         // Act & Assert: el registro debe ser rechazado.
-        assertThrows(RuntimeException.class, () -> {
-            authService.register(requestDto);
-        });
+        EmailAlreadyExistsException exception = assertThrows(
+                EmailAlreadyExistsException.class,
+                () -> authService.register(request)
+        );
 
-        /*
-         * Si el email ya existe, no se debe:
-         *
-         * - Codificar la contraseña.
-         * - Guardar un usuario.
-         * - Generar un JWT.
-         */
+        assertTrue(exception.getMessage().contains(email));
+
+
+        // Si el email ya existe, no se debe guardar ni generar un token
         verify(passwordEncoder, never()).encode(any());
         verify(userRepository, never()).save(any(User.class));
         verify(jwtService, never()).generateToken(any());
@@ -114,9 +114,9 @@ class AuthServiceTest {
     void register_debeRegistrarUsuarioComoCustomer() {
 
         // Arrange: request valido de registro publico.
-        RegisterRequestDto requestDto = new RegisterRequestDto();
-        requestDto.setEmail(email);
-        requestDto.setPassword(password);
+        RegisterRequestDto request = new RegisterRequestDto();
+        request.setEmail(email);
+        request.setPassword(password);
 
         // Simulamos que el email todavia no esta registrado.
         when(userRepository.findByEmail(email)).thenReturn(Optional.empty());
@@ -132,7 +132,7 @@ class AuthServiceTest {
         when(jwtService.generateToken(email)).thenReturn("jwt.token.falso");
 
         // Act: ejecutamos el registro.
-        AuthResponseDto result = authService.register(requestDto);
+        AuthResponseDto result = authService.register(request);
 
         /*
          * Capturamos el User enviado a userRepository.save().
@@ -150,18 +150,15 @@ class AuthServiceTest {
         // Assert: el email guardado debe ser el recibido.
         assertEquals(email, savedUser.getEmail());
 
-        /*
-         * La contraseña almacenada debe ser la contraseña codificada
-         * y nunca la contraseña original.
-         */
+
+        // La contraseña almacenada debe ser la contraseña codificada, nunca la original.
+
         assertEquals("encoded-password", savedUser.getPassword());
         assertNotEquals(password, savedUser.getPassword());
 
         /*
-         * Regla de seguridad principal:
-         *
-         * Todoo usuario registrado desde el endpoint público
-         * debe recibir obligatoriamente el rol CUSTOMER.
+         * Todo usuario registrado desde el endpoint público
+         * debe recibir el rol CUSTOMER.
          */
         assertEquals(Rol.CUSTOMER, savedUser.getRol());
 
@@ -210,9 +207,14 @@ class AuthServiceTest {
         when(userRepository.findByEmail(email)).thenReturn(Optional.empty());
 
         // Act & Assert: el login debe ser rechazado.
-        assertThrows(RuntimeException.class, () -> {
-            authService.login(requestDto);
-        });
+        ResourceNotFoundException exception = assertThrows(
+                ResourceNotFoundException.class,
+                () -> authService.login(requestDto)
+        );
+
+        assertEquals("User", exception.getResourceName());
+        assertEquals("email", exception.getFieldName());
+        assertEquals(email, exception.getFieldValue());
 
         // Si el usuario no se encuentra, no se debe generar ningun token.
         verify(jwtService, never()).generateToken(any());

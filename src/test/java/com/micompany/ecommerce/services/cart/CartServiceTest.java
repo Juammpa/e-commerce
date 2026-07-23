@@ -2,6 +2,9 @@ package com.micompany.ecommerce.services.cart;
 
 import com.micompany.ecommerce.dto.carts.CartItemRequestDto;
 import com.micompany.ecommerce.dto.carts.CartResponseDto;
+import com.micompany.ecommerce.exceptions.InsufficientStockException;
+import com.micompany.ecommerce.exceptions.InvalidQuantityException;
+import com.micompany.ecommerce.exceptions.ResourceNotFoundException;
 import com.micompany.ecommerce.models.entities.Cart;
 import com.micompany.ecommerce.models.entities.CartItem;
 import com.micompany.ecommerce.models.entities.Product;
@@ -10,7 +13,6 @@ import com.micompany.ecommerce.repositories.CartRepository;
 import com.micompany.ecommerce.repositories.ProductRepository;
 import com.micompany.ecommerce.repositories.UserRepository;
 import com.micompany.ecommerce.services.carts.CartService;
-import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,7 +25,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-@ExtendWith(MockitoExtension.class)     // Conecta Mockito con JUnit 5
+@ExtendWith(MockitoExtension.class)
 class CartServiceTest {
 
     @Mock
@@ -38,321 +40,403 @@ class CartServiceTest {
     @InjectMocks
     private CartService cartService;
 
-    // ================ Metodo Helper ==============
-
     private String email;
     private User testUser;
     private Cart testCart;
+    private Product testProduct;
 
     @BeforeEach
     void setUp() {
 
         email = "example@gmail.com";
+
         testUser = new User();
-
+        testUser.setId(1L);
         testUser.setEmail(email);
-        testCart = new Cart();
 
+        testCart = new Cart();
+        testCart.setId(1L);
         testCart.setUser(testUser);
+
+        testProduct = new Product();
+        testProduct.setId(1L);
+        testProduct.setName("Notebook");
+        testProduct.setPrice(1000.0);
+        testProduct.setStock(10);
     }
 
-
-    // ============ Pruebas metodo getCart() ===============
     @Test
-    void getCart_deberiaRetornarCarrito_cuandoUsuarioExiste() {
+    void getCart_debeRetornarCarrito_cuandoUsuarioExiste() {
 
-       // Arrange
+        when(userRepository.findByEmail(email))
+                .thenReturn(Optional.of(testUser));
 
-        // Le digo al mock, lo que me tiene que devolver
-        when(userRepository.findByEmail(email)).thenReturn(Optional.of(testUser));
-        when(cartRepository.findByUser(testUser)).thenReturn(Optional.of(testCart));
+        when(cartRepository.findByUser(testUser))
+                .thenReturn(Optional.of(testCart));
 
-        // Act
         CartResponseDto result = cartService.getCart(email);
 
-        // Assert
         assertNotNull(result);
         assertNotNull(result.getItems());
+        assertTrue(result.getItems().isEmpty());
         assertEquals(0.0, result.getTotal());
 
-        // Verificamos que el service llamo a las dependencias!
-        verify(userRepository, times(1)).findByEmail(email);
-        verify(cartRepository, times(1)).findByUser(testUser);
-
+        verify(userRepository).findByEmail(email);
+        verify(cartRepository).findByUser(testUser);
     }
 
     @Test
-    void getCart_deberiaDarError_cuadoUsuarioNoExiste() {
+    void getCart_debeDarError_cuandoUsuarioNoExiste() {
 
-        // Arrange
-        String email = "No existe";
+        when(userRepository.findByEmail(email))
+                .thenReturn(Optional.empty());
 
-        // Si el usuario no existe, devuelve Optional vacio
-        when(userRepository.findByEmail(email)).thenReturn(Optional.empty());
+        ResourceNotFoundException exception = assertThrows(
+                ResourceNotFoundException.class,
+                () -> cartService.getCart(email)
+        );
 
-        // Act & Assert
-
-        // Como no existe el usuario, deberia dar error
-        EntityNotFoundException ex = assertThrows(EntityNotFoundException.class,() -> {
-            cartService.getCart(email);
-        });
-
-        assertTrue(ex.getMessage().contains(email)); // el mensaje menciona el email que falló
-
+        assertEquals("User", exception.getResourceName());
+        assertEquals("email", exception.getFieldName());
+        assertEquals(email, exception.getFieldValue());
     }
 
-    // ============ Pruebas metodo addCartItem() =============
     @Test
-    void addCartItem_deberiaRetornarCarrito_cuandoProductoExiste() {
+    void addCartItem_debeAgregarProducto_cuandoDatosSonValidos() {
 
-        // Arrange
+        CartItemRequestDto request = new CartItemRequestDto();
+        request.setProductId(testProduct.getId());
+        request.setQuantity(2);
 
-        // Creo un producto cualquiera
-        Product product = new Product();
+        when(userRepository.findByEmail(email))
+                .thenReturn(Optional.of(testUser));
 
-        // Creo el CartItem
-        CartItem cartItem = new CartItem();
-        cartItem.setCart(testCart);
-        cartItem.setProduct(product);
+        when(cartRepository.findByUser(testUser))
+                .thenReturn(Optional.of(testCart));
 
+        when(productRepository.findById(testProduct.getId()))
+                .thenReturn(Optional.of(testProduct));
 
-        CartItemRequestDto requestDto = new CartItemRequestDto();
-        requestDto.setProductId(product.getId());
-        requestDto.setQuantity(10); // Cantidad del producto
+        when(cartRepository.save(testCart))
+                .thenReturn(testCart);
 
-        // Le digo al mock, lo que me tiene que devolver
-        when(userRepository.findByEmail(email)).thenReturn(Optional.of(testUser));
-        when(cartRepository.findByUser(testUser)).thenReturn(Optional.of(testCart));
-        when(productRepository.findById(product.getId())).thenReturn(Optional.of(product));
-        when(cartRepository.save(testCart)).thenReturn(testCart);
+        CartResponseDto result =
+                cartService.addCartItem(email, request);
 
-        // Act
-        CartResponseDto result = cartService.addCartItem(email,requestDto);
-
-        // Assert
         assertEquals(1, result.getItems().size());
-
+        assertEquals(2, testCart.getItems().get(0).getQuantity());
     }
 
     @Test
-    void addCartItem_deberiaDarError_cuandoProductoNoExiste() {
+    void addCartItem_debeDarError_cuandoCantidadEsInvalida() {
 
-        // Arrange
+        CartItemRequestDto request = new CartItemRequestDto();
+        request.setProductId(1L);
+        request.setQuantity(0);
 
-        CartItemRequestDto requestDto = new CartItemRequestDto();
+        assertThrows(
+                InvalidQuantityException.class,
+                () -> cartService.addCartItem(email, request)
+        );
 
-        // Le digo al mock, lo que me tiene que devolver
-        when(userRepository.findByEmail(email)).thenReturn(Optional.of(testUser));
-        when(cartRepository.findByUser(testUser)).thenReturn(Optional.of(testCart));
-        when(productRepository.findById(requestDto.getProductId())).thenReturn(Optional.empty()); // Si el producto no existe, devuelve null
-
-
-        // Act & Assert
-        EntityNotFoundException ex = assertThrows(EntityNotFoundException.class, () -> {
-
-            cartService.addCartItem(email,requestDto);
-        });
-
-
+        // La validación sucede antes de acceder a la base.
+        verifyNoInteractions(
+                userRepository,
+                productRepository,
+                cartRepository
+        );
     }
 
     @Test
-    void addCartItem_deberiaSumarCantidad_cuandoProductoExisteEnCarrito() {
+    void addCartItem_debeDarError_cuandoProductoNoExiste() {
 
-        // Arrange
+        CartItemRequestDto request = new CartItemRequestDto();
+        request.setProductId(99L);
+        request.setQuantity(1);
 
-        // Creo producto que ya esta en el carrito.
-        Product product = new Product();
-        product.setId(1L);
+        when(userRepository.findByEmail(email))
+                .thenReturn(Optional.of(testUser));
 
-        // El item que ya existe en el carrito
+        when(cartRepository.findByUser(testUser))
+                .thenReturn(Optional.of(testCart));
+
+        when(productRepository.findById(99L))
+                .thenReturn(Optional.empty());
+
+        ResourceNotFoundException exception = assertThrows(
+                ResourceNotFoundException.class,
+                () -> cartService.addCartItem(email, request)
+        );
+
+        assertEquals("Product", exception.getResourceName());
+        assertEquals(99L, exception.getFieldValue());
+    }
+
+    @Test
+    void addCartItem_debeSumarCantidad_cuandoProductoYaExiste() {
+
         CartItem existingItem = new CartItem();
-        existingItem.setProduct(product);
-        existingItem.setQuantity(2);  // cantidad inicial
+        existingItem.setId(1L);
+        existingItem.setCart(testCart);
+        existingItem.setProduct(testProduct);
+        existingItem.setQuantity(2);
 
-        // El carrito ya tiene ese item
         testCart.getItems().add(existingItem);
 
         CartItemRequestDto request = new CartItemRequestDto();
-        request.setProductId(1L);  // mismo ID
-        request.setQuantity(3);    // quiere agregar 3 más
+        request.setProductId(testProduct.getId());
+        request.setQuantity(3);
 
-        // Le digo al mock, lo que me tiene que devolver
-        when(userRepository.findByEmail(email)).thenReturn(Optional.of(testUser));
-        when(cartRepository.findByUser(testUser)).thenReturn(Optional.of(testCart));
-        when(productRepository.findById(product.getId())).thenReturn(Optional.of(product));
-        when(cartRepository.save(testCart)).thenReturn(testCart);
+        when(userRepository.findByEmail(email))
+                .thenReturn(Optional.of(testUser));
 
-        // Act
-        cartService.addCartItem(email ,request);
+        when(cartRepository.findByUser(testUser))
+                .thenReturn(Optional.of(testCart));
 
-        // Assert
+        when(productRepository.findById(testProduct.getId()))
+                .thenReturn(Optional.of(testProduct));
+
+        when(cartRepository.save(testCart))
+                .thenReturn(testCart);
+
+        cartService.addCartItem(email, request);
+
         assertEquals(5, existingItem.getQuantity());
-
-    }
-
-    // ============= Pruebas metodo updateCartQuantity() ===========
-    @Test
-    void updateCartQuantity_deberiaDarError_cuandoUsuarioNoExiste() {
-
-        // Arrange
-        String email = "No existe";
-
-        // Le digo al mock, lo que me tiene que devolver
-        when(userRepository.findByEmail(email)).thenReturn(Optional.empty());
-
-        // Act & Assert
-
-        // Como no existe el usuario, deberia dar error
-        EntityNotFoundException ex = assertThrows(EntityNotFoundException.class,() -> {
-            cartService.updateCartQuantity(email,1L, 4);
-        });
-
-        assertTrue(ex.getMessage().contains(email)); // el mensaje menciona el email que falló
     }
 
     @Test
-    void updateCartQuantity_debeDarError_cuandoProductoNoEstaEnCarrito() {
+    void addCartItem_debeDarError_cuandoCantidadFinalSuperaStock() {
 
-        // Arrange
-        when(userRepository.findByEmail(email)).thenReturn(Optional.of(testUser));
-        when(cartRepository.findByUser(testUser)).thenReturn(Optional.of(testCart));
+        CartItem existingItem = new CartItem();
+        existingItem.setId(1L);
+        existingItem.setCart(testCart);
+        existingItem.setProduct(testProduct);
+        existingItem.setQuantity(8);
 
-        // Act & Assert
-        assertThrows(EntityNotFoundException.class, () -> {
+        testCart.getItems().add(existingItem);
 
-            cartService.updateCartQuantity(email, 99L, 2);
-        });
+        CartItemRequestDto request = new CartItemRequestDto();
+        request.setProductId(testProduct.getId());
+        request.setQuantity(3);
 
+        when(userRepository.findByEmail(email))
+                .thenReturn(Optional.of(testUser));
+
+        when(cartRepository.findByUser(testUser))
+                .thenReturn(Optional.of(testCart));
+
+        when(productRepository.findById(testProduct.getId()))
+                .thenReturn(Optional.of(testProduct));
+
+        InsufficientStockException exception = assertThrows(
+                InsufficientStockException.class,
+                () -> cartService.addCartItem(email, request)
+        );
+
+        assertEquals(11, exception.getRequestedQuantity());
+        assertEquals(10, exception.getAvailableStock());
+
+        verify(cartRepository, never()).save(any(Cart.class));
     }
 
     @Test
-    void updateCartQuantity_debeDarError_cuandoCantidadEsMayorAStock() {
+    void updateCartQuantity_debeDarError_cuandoCantidadEsInvalida() {
 
-        // Arrange
+        assertThrows(
+                InvalidQuantityException.class,
+                () -> cartService.updateCartQuantity(
+                        email,
+                        1L,
+                        -1
+                )
+        );
 
-        // Creo un producto y lo agrego al carrito.
-        Product product = new Product();
-        product.setStock(10);
+        verifyNoInteractions(
+                userRepository,
+                productRepository,
+                cartRepository
+        );
+    }
 
-        // Agrego el cartItem al carrito
-        CartItem cartItem = new CartItem();
-        cartItem.setId(1L);
-        cartItem.setProduct(product);
-        testCart.getItems().add(cartItem);
+    @Test
+    void updateCartQuantity_debeDarError_cuandoUsuarioNoExiste() {
 
-        // Le digo al mock, lo que me tiene que devolver
-        when(userRepository.findByEmail(email)).thenReturn(Optional.of(testUser));
-        when(cartRepository.findByUser(testUser)).thenReturn(Optional.of(testCart));
+        when(userRepository.findByEmail(email))
+                .thenReturn(Optional.empty());
 
-        // Act & Assert
-        assertThrows(RuntimeException.class, () -> {
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> cartService.updateCartQuantity(
+                        email,
+                        1L,
+                        4
+                )
+        );
+    }
 
-            cartService.updateCartQuantity(email,1L,15);
-        });
+    @Test
+    void updateCartQuantity_debeDarError_cuandoItemNoExiste() {
 
+        when(userRepository.findByEmail(email))
+                .thenReturn(Optional.of(testUser));
 
+        when(cartRepository.findByUser(testUser))
+                .thenReturn(Optional.of(testCart));
+
+        ResourceNotFoundException exception = assertThrows(
+                ResourceNotFoundException.class,
+                () -> cartService.updateCartQuantity(
+                        email,
+                        99L,
+                        2
+                )
+        );
+
+        assertEquals("Item", exception.getResourceName());
+        assertEquals(99L, exception.getFieldValue());
+    }
+
+    @Test
+    void updateCartQuantity_debeDarError_cuandoSuperaStock() {
+
+        CartItem item = new CartItem();
+        item.setId(1L);
+        item.setCart(testCart);
+        item.setProduct(testProduct);
+        item.setQuantity(1);
+
+        testCart.getItems().add(item);
+
+        when(userRepository.findByEmail(email))
+                .thenReturn(Optional.of(testUser));
+
+        when(cartRepository.findByUser(testUser))
+                .thenReturn(Optional.of(testCart));
+
+        InsufficientStockException exception = assertThrows(
+                InsufficientStockException.class,
+                () -> cartService.updateCartQuantity(
+                        email,
+                        1L,
+                        15
+                )
+        );
+
+        assertEquals(testProduct.getId(), exception.getProductId());
+        assertEquals(15, exception.getRequestedQuantity());
+        assertEquals(10, exception.getAvailableStock());
+
+        verify(cartRepository, never()).save(any(Cart.class));
     }
 
     @Test
     void updateCartQuantity_debeActualizarCantidad() {
 
-        // Arrange
+        CartItem item = new CartItem();
+        item.setId(1L);
+        item.setCart(testCart);
+        item.setProduct(testProduct);
+        item.setQuantity(1);
 
-        // Creo un producto y lo agrego al carrito.
-        Product product = new Product();
-        product.setStock(10);
+        testCart.getItems().add(item);
 
-        // Agrego el cartItem al carrito
-        CartItem cartItem = new CartItem();
-        cartItem.setId(1L);
-        cartItem.setProduct(product);
-        testCart.getItems().add(cartItem);
+        when(userRepository.findByEmail(email))
+                .thenReturn(Optional.of(testUser));
 
-        // Le digo al mock, lo que me tiene que devolver
-        when(userRepository.findByEmail(email)).thenReturn(Optional.of(testUser));
-        when(cartRepository.findByUser(testUser)).thenReturn(Optional.of(testCart));
-        when(cartRepository.save(testCart)).thenReturn(testCart);
+        when(cartRepository.findByUser(testUser))
+                .thenReturn(Optional.of(testCart));
 
-        // Act
-        cartService.updateCartQuantity(email,1L,7);
+        when(cartRepository.save(testCart))
+                .thenReturn(testCart);
 
-        // Assert
-        assertEquals(7, cartItem.getQuantity());
+        CartResponseDto result =
+                cartService.updateCartQuantity(
+                        email,
+                        1L,
+                        7
+                );
 
-    }
-
-    // ============= Pruebas metodo removeCartItem() ==============
-    @Test
-    void removeCartItem_deberiaDarError_cuandoUsuarioNoExiste() {
-
-        // Arrange
-
-        // Le digo al mock, lo que me tiene que devolver
-        when(userRepository.findByEmail(email)).thenReturn(Optional.empty());
-
-        // Act & Assert
-        assertThrows(EntityNotFoundException.class, () -> {
-
-            cartService.removeCartItem(email, 1L);
-
-        });
+        assertNotNull(result);
+        assertEquals(7, item.getQuantity());
     }
 
     @Test
-    void removeCartItem_deberiaEliminarCartItem() {
+    void removeCartItem_debeDarError_cuandoUsuarioNoExiste() {
 
-        // Arrange
+        when(userRepository.findByEmail(email))
+                .thenReturn(Optional.empty());
 
-        // Agrego el cartItem al carrito
-        CartItem cartItem = new CartItem();
-        cartItem.setId(1L);
-        testCart.getItems().add(cartItem);
-
-        // Le digo al mock, lo que me tiene que devolver
-        when(userRepository.findByEmail(email)).thenReturn(Optional.of(testUser));
-        when(cartRepository.findByUser(testUser)).thenReturn(Optional.of(testCart));
-        when(cartRepository.save(testCart)).thenReturn(testCart);
-
-        // Act
-        cartService.removeCartItem(email, 1L);
-
-        // Assert
-        assertEquals(0, testCart.getItems().size());
-        assertFalse(testCart.getItems().contains(cartItem));
-
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> cartService.removeCartItem(email, 1L)
+        );
     }
 
     @Test
-    void removeCartItem_deberiaDarError_cuandoCartItemNoExiste() {
+    void removeCartItem_debeDarError_cuandoItemNoExiste() {
 
-        // Arrange
-        when(userRepository.findByEmail(email)).thenReturn(Optional.of(testUser));
-        when(cartRepository.findByUser(testUser)).thenReturn(Optional.of(testCart));
+        when(userRepository.findByEmail(email))
+                .thenReturn(Optional.of(testUser));
 
-        // Act & Assert
-        assertThrows(EntityNotFoundException.class, () -> {
+        when(cartRepository.findByUser(testUser))
+                .thenReturn(Optional.of(testCart));
 
-           cartService.removeCartItem(email, 1L);
-
-        });
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> cartService.removeCartItem(email, 99L)
+        );
     }
 
-    // =================== Pruebas metodo deleteCart() ================
+    @Test
+    void removeCartItem_debeEliminarItem() {
+
+        CartItem item = new CartItem();
+        item.setId(1L);
+        item.setCart(testCart);
+        item.setProduct(testProduct);
+        item.setQuantity(1);
+
+        testCart.getItems().add(item);
+
+        when(userRepository.findByEmail(email))
+                .thenReturn(Optional.of(testUser));
+
+        when(cartRepository.findByUser(testUser))
+                .thenReturn(Optional.of(testCart));
+
+        when(cartRepository.save(testCart))
+                .thenReturn(testCart);
+
+        CartResponseDto result =
+                cartService.removeCartItem(email, 1L);
+
+        assertNotNull(result);
+        assertTrue(testCart.getItems().isEmpty());
+    }
 
     @Test
-    void deleteCart_deberiaLimpiarCarrito() {
+    void deleteCart_debeLimpiarCarrito() {
 
-        // Arrange
-        when(userRepository.findByEmail(email)).thenReturn(Optional.of(testUser));
-        when(cartRepository.findByUser(testUser)).thenReturn(Optional.of(testCart));
-        when(cartRepository.save(testCart)).thenReturn(testCart);
+        CartItem item = new CartItem();
+        item.setId(1L);
+        item.setCart(testCart);
+        item.setProduct(testProduct);
+        item.setQuantity(1);
 
-        // Act
+        testCart.getItems().add(item);
+
+        when(userRepository.findByEmail(email))
+                .thenReturn(Optional.of(testUser));
+
+        when(cartRepository.findByUser(testUser))
+                .thenReturn(Optional.of(testCart));
+
+        when(cartRepository.save(testCart))
+                .thenReturn(testCart);
+
         cartService.deleteCart(email);
 
-        // Assert
-        assertEquals(0, testCart.getItems().size());
-
+        assertTrue(testCart.getItems().isEmpty());
+        verify(cartRepository).save(testCart);
     }
 }

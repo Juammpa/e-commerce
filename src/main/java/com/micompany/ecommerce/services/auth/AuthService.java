@@ -3,6 +3,8 @@ package com.micompany.ecommerce.services.auth;
 import com.micompany.ecommerce.dto.auth.AuthResponseDto;
 import com.micompany.ecommerce.dto.auth.LoginRegisterDto;
 import com.micompany.ecommerce.dto.auth.RegisterRequestDto;
+import com.micompany.ecommerce.exceptions.EmailAlreadyExistsException;
+import com.micompany.ecommerce.exceptions.ResourceNotFoundException;
 import com.micompany.ecommerce.models.entities.User;
 import com.micompany.ecommerce.models.enums.Rol;
 import com.micompany.ecommerce.repositories.UserRepository;
@@ -32,7 +34,7 @@ public class AuthService implements IAuthService{
     public AuthResponseDto register(RegisterRequestDto request) {
 
         if(userRepository.findByEmail(request.getEmail()).isPresent()) {
-            throw new RuntimeException("Email already registered");
+            throw new EmailAlreadyExistsException(request.getEmail());
         }
 
         User user = new User();
@@ -58,7 +60,7 @@ public class AuthService implements IAuthService{
         );
 
         User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new RuntimeException("User not found."));
+                .orElseThrow(() -> new ResourceNotFoundException("User","email",request.getEmail()));
 
         String token = jwtService.generateToken(user.getEmail());
         return new AuthResponseDto(token);

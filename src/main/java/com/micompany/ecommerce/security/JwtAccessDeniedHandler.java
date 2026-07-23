@@ -1,8 +1,9 @@
 package com.micompany.ecommerce.security;
 
-import jakarta.servlet.ServletException;
+import com.micompany.ecommerce.exceptions.ErrorMessage;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.web.access.AccessDeniedHandler;
@@ -10,53 +11,55 @@ import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
-import java.time.Instant;
+import java.time.LocalDateTime;
 
 /*
- * Este componente se ejecuta cuando el usuario está autenticado,
- * pero no posee el rol necesario para utilizar un endpoint.
+ * Responde HTTP 403 cuando el usuario está autenticado,
+ * pero no posee el rol necesario.
  *
  * Ejemplo:
  *
- * - Un CUSTOMER intenta crear un producto.
- * - El endpoint requiere el rol ADMIN.
- *
- * En ese caso corresponde responder:
- *
- * HTTP 403 Forbidden
+ * Un CUSTOMER intenta acceder a un endpoint de ADMIN.
  */
 @Component
-public class JwtAccessDeniedHandler implements AccessDeniedHandler {
+@RequiredArgsConstructor
+public class JwtAccessDeniedHandler
+        implements AccessDeniedHandler {
 
     private final ObjectMapper objectMapper;
 
-    public JwtAccessDeniedHandler(ObjectMapper objectMapper) {
-        this.objectMapper = objectMapper;
-    }
-
     @Override
-    public void handle(HttpServletRequest request, HttpServletResponse response, AccessDeniedException accessDeniedException) throws IOException, ServletException {
+    public void handle(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            AccessDeniedException accessDeniedException
+    ) throws IOException {
 
-        // El usuario esta autenticado, pero no tiene autorizacion.
-        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+        // El usuario está autenticado, pero no está autorizado.
+        response.setStatus(
+                HttpServletResponse.SC_FORBIDDEN
+        );
 
-        // La respuesta se enviara como JSON
-        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setContentType(
+                MediaType.APPLICATION_JSON_VALUE
+        );
+
         response.setCharacterEncoding("UTF-8");
 
-        SecurityErrorResponse errorResponse =
-                new SecurityErrorResponse(
-                        Instant.now(),
-                        HttpServletResponse.SC_FORBIDDEN,
-                        "Forbidden",
-                        "You do not have permission to access this resource",
-                        request.getRequestURI()
-                );
+        /*
+         * Utilizamos el mismo formato de error que toda la API.
+         */
+        ErrorMessage errorMessage = new ErrorMessage(
+                HttpServletResponse.SC_FORBIDDEN,
+                "Forbidden",
+                "You do not have permission to access this resource",
+                LocalDateTime.now(),
+                request.getRequestURI()
+        );
 
-        // Convertimos el objeto en JSON y escribimos la respuesta.
         objectMapper.writeValue(
                 response.getOutputStream(),
-                errorResponse
+                errorMessage
         );
     }
 }

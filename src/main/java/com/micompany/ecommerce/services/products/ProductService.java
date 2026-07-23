@@ -2,12 +2,12 @@ package com.micompany.ecommerce.services.products;
 
 import com.micompany.ecommerce.dto.products.ProductRequestDto;
 import com.micompany.ecommerce.dto.products.ProductResponseDto;
+import com.micompany.ecommerce.exceptions.ResourceNotFoundException;
 import com.micompany.ecommerce.mappers.Mapper;
 import com.micompany.ecommerce.models.entities.Category;
 import com.micompany.ecommerce.models.entities.Product;
 import com.micompany.ecommerce.repositories.CategoryRepository;
 import com.micompany.ecommerce.repositories.ProductRepository;
-import jakarta.persistence.EntityNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -38,7 +38,7 @@ public class ProductService implements IProductService{
     public ProductResponseDto getProduct(Long id) {
 
         Product product = productRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Product with ID: " + id + " not found."));
+                .orElseThrow(() -> new ResourceNotFoundException("Product","id", id));
 
         return Mapper.toDTO(product);
     }
@@ -46,11 +46,10 @@ public class ProductService implements IProductService{
     @Override
     public ProductResponseDto createProduct(ProductRequestDto request) {
 
-        if(!categoryRepository.existsById(request.getCategoryId())) {
-            throw new EntityNotFoundException("The category ID not exists");
-        }
-
-        Category category = categoryRepository.findById(request.getCategoryId()).get();
+        Category category = categoryRepository
+                .findById(request.getCategoryId())
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("Category", "id", request.getCategoryId()));
 
         Product product = Product.builder()
                 .name(request.getName())
@@ -67,13 +66,12 @@ public class ProductService implements IProductService{
     public ProductResponseDto updateProduct(Long id, ProductRequestDto request) {
 
         Product product = productRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Product with ID: " + id + " not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Product","id",id));
 
-        if(!categoryRepository.existsById(request.getCategoryId())) {
-            throw new EntityNotFoundException("The category ID not exists");
-        }
-
-        Category category = categoryRepository.findById(request.getCategoryId()).get();
+        Category category = categoryRepository
+                .findById(request.getCategoryId())
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("Category", "id", request.getCategoryId()));
 
         product.setName(request.getName());
         product.setPrice(request.getPrice());
@@ -88,7 +86,7 @@ public class ProductService implements IProductService{
     public void deleteProduct(Long id) {
 
         if(!productRepository.existsById(id)) {
-            throw new EntityNotFoundException("Product with ID: " +id+ " not found.");
+            throw new ResourceNotFoundException("Product","id",id);
         }
 
         productRepository.deleteById(id);

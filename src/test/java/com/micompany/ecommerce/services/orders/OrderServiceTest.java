@@ -2,13 +2,18 @@ package com.micompany.ecommerce.services.orders;
 
 import com.micompany.ecommerce.dto.orders.OrderResponseDto;
 import com.micompany.ecommerce.dto.orders.OrderStatusUpdateDto;
-import com.micompany.ecommerce.models.entities.*;
+import com.micompany.ecommerce.exceptions.EmptyCartException;
+import com.micompany.ecommerce.exceptions.ResourceNotFoundException;
+import com.micompany.ecommerce.models.entities.Cart;
+import com.micompany.ecommerce.models.entities.CartItem;
+import com.micompany.ecommerce.models.entities.Order;
+import com.micompany.ecommerce.models.entities.Product;
+import com.micompany.ecommerce.models.entities.User;
 import com.micompany.ecommerce.models.enums.Rol;
 import com.micompany.ecommerce.models.enums.Status;
 import com.micompany.ecommerce.repositories.CartRepository;
 import com.micompany.ecommerce.repositories.OrderRepository;
 import com.micompany.ecommerce.repositories.UserRepository;
-import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -16,14 +21,13 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class OrderServiceTest {
@@ -40,323 +44,322 @@ class OrderServiceTest {
     @InjectMocks
     private OrderService orderService;
 
-    // ========== Metodos Helper =========
     private String email;
     private User testUser;
 
     @BeforeEach
     void setUp() {
+
         email = "example@gmail.com";
+
         testUser = new User();
+        testUser.setId(1L);
         testUser.setEmail(email);
+        testUser.setRol(Rol.CUSTOMER);
     }
 
-    // ============= Pruebas metodo createOrder() ===============
     @Test
     void createOrder_debeDarError_cuandoUsuarioNoExiste() {
 
-        // Arrange
-        when(userRepository.findByEmail(email)).thenReturn(Optional.empty());
+        when(userRepository.findByEmail(email))
+                .thenReturn(Optional.empty());
 
-        // Act & Assert
-        assertThrows(EntityNotFoundException.class, () -> {
+        ResourceNotFoundException exception = assertThrows(
+                ResourceNotFoundException.class,
+                () -> orderService.createOrder(email)
+        );
 
-            orderService.createOrder(email);
-        });
+        assertEquals("User", exception.getResourceName());
     }
 
     @Test
     void createOrder_debeDarError_cuandoCarritoNoExiste() {
 
-        // Arrange
+        when(userRepository.findByEmail(email))
+                .thenReturn(Optional.of(testUser));
 
-        when(userRepository.findByEmail(email)).thenReturn(Optional.of(testUser));
-        when(cartRepository.findByUser(testUser)).thenReturn(Optional.empty());
+        when(cartRepository.findByUser(testUser))
+                .thenReturn(Optional.empty());
 
-        // Act & Assert
-        assertThrows(EntityNotFoundException.class, () -> {
-            orderService.createOrder(email);
-        });
+        ResourceNotFoundException exception = assertThrows(
+                ResourceNotFoundException.class,
+                () -> orderService.createOrder(email)
+        );
 
+        assertEquals("Cart", exception.getResourceName());
     }
 
     @Test
     void createOrder_debeDarError_cuandoCarritoEstaVacio() {
 
-        // Arrange
-
         Cart cart = new Cart();
         cart.setUser(testUser);
-        cart.setItems(Collections.emptyList());
 
-        when(userRepository.findByEmail(email)).thenReturn(Optional.of(testUser));
-        when(cartRepository.findByUser(testUser)).thenReturn(Optional.of(cart));
+        when(userRepository.findByEmail(email))
+                .thenReturn(Optional.of(testUser));
 
-        // Act & Assert
-        assertThrows(RuntimeException.class, () -> {
-            orderService.createOrder(email);
-        });
+        when(cartRepository.findByUser(testUser))
+                .thenReturn(Optional.of(cart));
 
+        assertThrows(
+                EmptyCartException.class,
+                () -> orderService.createOrder(email)
+        );
+
+        verify(orderRepository, never())
+                .save(any(Order.class));
     }
 
     @Test
-    void createOrder_debeCrearOrder_cuandoDatosSonCorrectos() {
+    void createOrder_debeCrearOrden_yVaciarCarrito() {
 
-        // Arrange
-
-        // Creo producto que va en CartItem
         Product product = new Product();
         product.setId(1L);
-        product.setPrice(1000d);
+        product.setName("Notebook");
+        product.setPrice(1000.0);
 
-        // Creo CartItem que va en Cart
-        CartItem cartItem = new CartItem();
-        cartItem.setProduct(product);
+        CartItem item = new CartItem();
+        item.setId(1L);
+        item.setProduct(product);
+        item.setQuantity(2);
 
         Cart cart = new Cart();
+        cart.setId(1L);
         cart.setUser(testUser);
-        List<CartItem> items = new ArrayList<>();
-        items.add(cartItem);
-        cart.setItems(items);
+        cart.getItems().add(item);
 
-        cartItem.setCart(cart);
+        item.setCart(cart);
 
-        Order order = new Order();
-        order.setUser(testUser);
+        when(userRepository.findByEmail(email))
+                .thenReturn(Optional.of(testUser));
 
-        when(userRepository.findByEmail(email)).thenReturn(Optional.of(testUser));
-        when(cartRepository.findByUser(testUser)).thenReturn(Optional.of(cart));
-        when(orderRepository.save(any(Order.class))).thenReturn(order);
-        when(cartRepository.save(any(Cart.class))).thenReturn(cart);
+        when(cartRepository.findByUser(testUser))
+                .thenReturn(Optional.of(cart));
 
-        // Act
-        OrderResponseDto result = orderService.createOrder(email);
+        when(orderRepository.save(any(Order.class)))
+                .thenAnswer(invocation -> {
 
-        // Assert
+                    Order order = invocation.getArgument(0);
+                    order.setId(1L);
+
+                    return order;
+                });
+
+        when(cartRepository.save(cart))
+                .thenReturn(cart);
+
+        OrderResponseDto result =
+                orderService.createOrder(email);
+
+        assertNotNull(result);
+        assertEquals(1L, result.getId());
         assertEquals(1, result.getItems().size());
         assertTrue(cart.getItems().isEmpty());
+
+        verify(orderRepository).save(any(Order.class));
+        verify(cartRepository).save(cart);
     }
 
-    // ================= Pruebas metodo getMyOrders() ===============
     @Test
     void getMyOrders_debeDarError_cuandoUsuarioNoExiste() {
 
-        // Arrange
-        String email = "No existe";
-        when(userRepository.findByEmail(email)).thenReturn(Optional.empty());
+        when(userRepository.findByEmail(email))
+                .thenReturn(Optional.empty());
 
-        // Act & Assert
-        assertThrows(EntityNotFoundException.class, () -> {
-
-            orderService.getMyOrders(email);
-        });
-
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> orderService.getMyOrders(email)
+        );
     }
 
     @Test
     void getMyOrders_debeDevolverOrdenesDelUsuario() {
 
-        // Arrange
+        Order order1 = order(1L, Status.PENDING);
+        Order order2 = order(2L, Status.CONFIRMED);
 
-        // Ordenes del usuario actual
-        Order order1 = new Order();
-        order1.setUser(testUser);
-        Order order2 = new Order();
-        order2.setUser(testUser);
+        when(userRepository.findByEmail(email))
+                .thenReturn(Optional.of(testUser));
 
-        when(userRepository.findByEmail(email)).thenReturn(Optional.of(testUser));
-        when(orderRepository.findAllByUser(testUser)).thenReturn(List.of(order1,order2));
+        when(orderRepository.findAllByUser(testUser))
+                .thenReturn(List.of(order1, order2));
 
-        // Act
-        List<OrderResponseDto> result = orderService.getMyOrders(email);
+        List<OrderResponseDto> result =
+                orderService.getMyOrders(email);
 
-        // Assert
-        assertNotNull(result);
         assertEquals(2, result.size());
     }
 
-    // ============= Pruebas metodo getOrder() ==================
     @Test
     void getOrder_debeDarError_cuandoUsuarioNoExiste() {
 
-        // Arrange
-        when(userRepository.findByEmail(email)).thenReturn(Optional.empty());
+        when(userRepository.findByEmail(email))
+                .thenReturn(Optional.empty());
 
-        // Act & Assert
-        assertThrows(EntityNotFoundException.class, () -> {
-
-            orderService.getOrder(email, 99L);
-        });
-
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> orderService.getOrder(email, 99L)
+        );
     }
 
     @Test
-    void getOrder_debeDarError_cuandoNoExisteOrder_siendoAdmin() {
+    void getOrder_debeDarError_cuandoOrdenNoExiste_siendoAdmin() {
 
-        // Arrange
         testUser.setRol(Rol.ADMIN);
 
-        when(userRepository.findByEmail(email)).thenReturn(Optional.of(testUser));
-        when(orderRepository.findById(99L)).thenReturn(Optional.empty());
+        when(userRepository.findByEmail(email))
+                .thenReturn(Optional.of(testUser));
 
-        // Act & Assert
-        assertThrows(EntityNotFoundException.class, () -> {
-           orderService.getOrder(email, 99L);
-        });
+        when(orderRepository.findById(99L))
+                .thenReturn(Optional.empty());
 
+        ResourceNotFoundException exception = assertThrows(
+                ResourceNotFoundException.class,
+                () -> orderService.getOrder(email, 99L)
+        );
+
+        assertEquals("Order", exception.getResourceName());
     }
 
     @Test
-    void getOrder_debeDarError_cuandoNoExisteOrder_siendoCliente() {
+    void getOrder_debeDarError_cuandoOrdenNoPerteneceAlCustomer() {
 
-        // Arrange
         testUser.setRol(Rol.CUSTOMER);
 
-        when(userRepository.findByEmail(email)).thenReturn(Optional.of(testUser));
-        when(orderRepository.findAllByUser(testUser)).thenReturn(Collections.emptyList());
+        when(userRepository.findByEmail(email))
+                .thenReturn(Optional.of(testUser));
 
-        // Act & Assert
-        assertThrows(EntityNotFoundException.class, () -> {
-            orderService.getOrder(email, 99L);
-        });
+        when(orderRepository.findAllByUser(testUser))
+                .thenReturn(Collections.emptyList());
+
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> orderService.getOrder(email, 99L)
+        );
     }
 
     @Test
-    void getOrder_debeDevolverOrden_cuandoExiste_siendoAdmin() {
+    void getOrder_debeDevolverOrden_siendoAdmin() {
 
-        // Arrange
         testUser.setRol(Rol.ADMIN);
 
-        Order order = new Order();
-        order.setId(1L);
-        order.setUser(testUser);
+        Order order = order(1L, Status.PENDING);
 
-        when(userRepository.findByEmail(email)).thenReturn(Optional.of(testUser));
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(userRepository.findByEmail(email))
+                .thenReturn(Optional.of(testUser));
 
-        // Act
-        OrderResponseDto result = orderService.getOrder(email, 1L);
+        when(orderRepository.findById(1L))
+                .thenReturn(Optional.of(order));
 
-        // Assert
-        assertNotNull(result);
+        OrderResponseDto result =
+                orderService.getOrder(email, 1L);
+
         assertEquals(1L, result.getId());
-
     }
 
     @Test
-    void getOrder_debeDevolverListaOrdenes_siendoCliente() {
+    void getOrder_debeDevolverOrdenPropia_siendoCustomer() {
 
-        // Arrange
-        testUser.setRol(Rol.CUSTOMER);
+        Order order1 = order(1L, Status.PENDING);
+        Order order2 = order(2L, Status.CONFIRMED);
 
-        Order order = new Order();
-        order.setId(1L);
-        order.setStatus(Status.PENDING);
-        order.setUser(testUser);
+        when(userRepository.findByEmail(email))
+                .thenReturn(Optional.of(testUser));
 
-        Order order2 = new Order();
-        order2.setId(2L);
-        order2.setStatus(Status.CONFIRMED);
-        order2.setUser(testUser);
+        when(orderRepository.findAllByUser(testUser))
+                .thenReturn(List.of(order1, order2));
 
-        when(userRepository.findByEmail(email)).thenReturn(Optional.of(testUser));
-        when(orderRepository.findAllByUser(testUser)).thenReturn(List.of(order, order2));
+        OrderResponseDto result =
+                orderService.getOrder(email, 2L);
 
-        // Act
-        OrderResponseDto result = orderService.getOrder(email, 2L);
-
-        // Assert
-        assertNotNull(result);
         assertEquals(2L, result.getId());
         assertEquals("CONFIRMED", result.getStatus());
     }
 
-    // =========== Pruebas metodo getAllOrders() ==============
     @Test
-    void getAllOrders_debeDevolverLista_cuandoNoExisteFiltro() {
+    void getAllOrders_debeDevolverTodas_cuandoNoHayFiltro() {
 
-        // Arrange
-        Order order = new Order();
-        order.setId(1L);
-        order.setUser(testUser);
-        order.setStatus(Status.PENDING);
+        when(orderRepository.findAll())
+                .thenReturn(
+                        List.of(
+                                order(1L, Status.PENDING),
+                                order(2L, Status.CONFIRMED)
+                        )
+                );
 
-        Order order2 = new Order();
-        order2.setId(2L);
-        order2.setUser(testUser);
-        order2.setStatus(Status.CONFIRMED);
+        List<OrderResponseDto> result =
+                orderService.getAllOrders(null);
 
-        when(orderRepository.findAll()).thenReturn(List.of(order, order2));
-
-        // Act
-        List<OrderResponseDto> result = orderService.getAllOrders(null);
-
-        // Assert
-        assertNotNull(result);
         assertEquals(2, result.size());
     }
 
     @Test
-    void getAllOrders_debeDevolverLista_cuandoFiltroEsActivo() {
+    void getAllOrders_debeFiltrarPorEstado() {
 
-        // Arrange
-        Order order = new Order();
-        order.setId(1L);
-        order.setUser(testUser);
-        order.setStatus(Status.PENDING);
+        when(orderRepository.findAll())
+                .thenReturn(
+                        List.of(
+                                order(1L, Status.PENDING),
+                                order(2L, Status.CONFIRMED)
+                        )
+                );
 
-        Order order2 = new Order();
-        order2.setId(2L);
-        order2.setUser(testUser);
-        order2.setStatus(Status.CONFIRMED);
+        List<OrderResponseDto> result =
+                orderService.getAllOrders(Status.PENDING);
 
-        when(orderRepository.findAll()).thenReturn(List.of(order, order2));
-
-        // Act
-        List<OrderResponseDto> result = orderService.getAllOrders(Status.PENDING);
-
-        // Assert
-        assertNotNull(result);
         assertEquals(1, result.size());
-
-    }
-
-    // ========== Pruebas metodo updateOrderState() ===============
-    @Test
-    void updateOrderState_debeDarError_cuandoOrderNoExiste() {
-
-        // Arrange
-        when(orderRepository.findById(99L)).thenReturn(Optional.empty());
-        OrderStatusUpdateDto requestDto = new OrderStatusUpdateDto();
-
-        // Act & Assert
-        assertThrows(EntityNotFoundException.class, () -> {
-
-           orderService.updateOrderState(99L, requestDto);
-        });
-
+        assertEquals("PENDING", result.get(0).getStatus());
     }
 
     @Test
-    void updateOrderState_debeActualizarEstado_cuandoExiste() {
+    void updateOrderState_debeDarError_cuandoOrdenNoExiste() {
 
-        // Arrange
-        Order order = new Order();
-        order.setId(1L);
-        order.setUser(testUser);
-        order.setStatus(Status.PENDING);
+        when(orderRepository.findById(99L))
+                .thenReturn(Optional.empty());
 
-        OrderStatusUpdateDto requestDto = new OrderStatusUpdateDto();
-        requestDto.setStatus(Status.CANCELLED);
+        OrderStatusUpdateDto request =
+                new OrderStatusUpdateDto();
 
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
-        when(orderRepository.save(any(Order.class))).thenReturn(order);
+        request.setStatus(Status.CANCELLED);
 
-        // Act
-        OrderResponseDto result = orderService.updateOrderState(1L, requestDto);
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> orderService.updateOrderState(99L, request)
+        );
 
-        // Assert
-        assertNotNull(result);
+        verify(orderRepository, never())
+                .save(any(Order.class));
+    }
+
+    @Test
+    void updateOrderState_debeActualizarEstado() {
+
+        Order order = order(1L, Status.PENDING);
+
+        OrderStatusUpdateDto request =
+                new OrderStatusUpdateDto();
+
+        request.setStatus(Status.CANCELLED);
+
+        when(orderRepository.findById(1L))
+                .thenReturn(Optional.of(order));
+
+        when(orderRepository.save(order))
+                .thenReturn(order);
+
+        OrderResponseDto result =
+                orderService.updateOrderState(1L, request);
+
         assertEquals("CANCELLED", result.getStatus());
+    }
+
+    private Order order(Long id, Status status) {
+
+        Order order = new Order();
+        order.setId(id);
+        order.setUser(testUser);
+        order.setStatus(status);
+
+        return order;
     }
 }

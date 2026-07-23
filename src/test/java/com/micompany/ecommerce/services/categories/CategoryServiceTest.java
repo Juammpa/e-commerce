@@ -2,10 +2,9 @@ package com.micompany.ecommerce.services.categories;
 
 import com.micompany.ecommerce.dto.categories.CategoryRequestDto;
 import com.micompany.ecommerce.dto.categories.CategoryResponseDto;
+import com.micompany.ecommerce.exceptions.ResourceNotFoundException;
 import com.micompany.ecommerce.models.entities.Category;
 import com.micompany.ecommerce.repositories.CategoryRepository;
-import jakarta.persistence.EntityNotFoundException;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -34,7 +33,12 @@ class CategoryServiceTest {
 
         // Arrange
         Category category1 = new Category();
+        category1.setId(1L);
+        category1.setName("Deportes");
+
         Category category2 = new Category();
+        category2.setId(2L);
+        category2.setName("Tecnología");
 
         when(categoryRepository.findAll()).thenReturn(List.of(category1, category2));
 
@@ -55,17 +59,23 @@ class CategoryServiceTest {
 
         CategoryRequestDto requestDto = new CategoryRequestDto();
         requestDto.setName("Deportes");
+        requestDto.setDescription("Productos deportivos");
 
-        Category category = new Category();
-        category.setName("Deportes");
+        when(categoryRepository.save(any(Category.class)))
+                .thenAnswer(invocation -> {
 
-        when(categoryRepository.save(any(Category.class))).thenReturn(category);
+                    Category category = invocation.getArgument(0);
+                    category.setId(1L);
+
+                    return category;
+                });
 
         // Act
         CategoryResponseDto result = categoryService.createCategory(requestDto);
 
         // Assert
         assertNotNull(result);
+        assertEquals(1L, result.getId());
         assertEquals("Deportes", result.getName());
 
     }
@@ -76,13 +86,18 @@ class CategoryServiceTest {
 
         // Arrange
         when(categoryRepository.findById(99L)).thenReturn(Optional.empty());
-        CategoryRequestDto requestDto = new CategoryRequestDto();
+        CategoryRequestDto request = new CategoryRequestDto();
+        request.setName("Deportes");
 
         // Act & Assert
-        assertThrows(EntityNotFoundException.class, () -> {
+        ResourceNotFoundException exception = assertThrows(
+                ResourceNotFoundException.class,
+                () -> categoryService.updateCategory(99L, request)
+        );
 
-            categoryService.updateCategory(99L, requestDto);
-        });
+        assertEquals("Category", exception.getResourceName());
+        assertEquals("id", exception.getFieldName());
+        assertEquals(99L, exception.getFieldValue());
 
     }
 
@@ -119,10 +134,12 @@ class CategoryServiceTest {
         when(categoryRepository.existsById(99L)).thenReturn(false);
 
         // Act & Assert
-        assertThrows(EntityNotFoundException.class, () -> {
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> categoryService.deleteCategory(99L)
+        );
 
-            categoryService.deleteCategory(99L);
-        });
+        verify(categoryRepository, never()).deleteById(anyLong());
 
     }
 
@@ -137,7 +154,7 @@ class CategoryServiceTest {
         categoryService.deleteCategory(1L);
 
         // Assert
-        verify(categoryRepository,times(1)).deleteById(1L);
+        verify(categoryRepository).deleteById(1L);
 
     }
 }

@@ -1,17 +1,18 @@
 package com.micompany.ecommerce.services.orders;
 
-import com.micompany.ecommerce.dto.orders.OrderItemResponseDto;
 import com.micompany.ecommerce.dto.orders.OrderResponseDto;
 import com.micompany.ecommerce.dto.orders.OrderStatusUpdateDto;
+import com.micompany.ecommerce.exceptions.EmptyCartException;
+import com.micompany.ecommerce.exceptions.ResourceNotFoundException;
 import com.micompany.ecommerce.mappers.Mapper;
 import com.micompany.ecommerce.models.entities.Cart;
 import com.micompany.ecommerce.models.entities.Order;
 import com.micompany.ecommerce.models.entities.User;
+import com.micompany.ecommerce.models.enums.Rol;
 import com.micompany.ecommerce.models.enums.Status;
 import com.micompany.ecommerce.repositories.CartRepository;
 import com.micompany.ecommerce.repositories.OrderRepository;
 import com.micompany.ecommerce.repositories.UserRepository;
-import jakarta.persistence.EntityNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -48,7 +49,7 @@ public class OrderService implements IOrderService{
     public List<OrderResponseDto> getMyOrders(String userEmail) {
 
         User user = userRepository.findByEmail(userEmail)
-                .orElseThrow(() -> new EntityNotFoundException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User", "email", userEmail));
 
         return orderRepository.findAllByUser(user).stream()
                 .map(Mapper::orderToResponseDTO).toList();
@@ -58,13 +59,12 @@ public class OrderService implements IOrderService{
     public OrderResponseDto getOrder(String userEmail, Long orderId) {
 
         User user = userRepository.findByEmail(userEmail)
-                .orElseThrow(() -> new EntityNotFoundException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User", "email", userEmail));
 
-        if(user.getRol().name().equals("ADMIN")) {
+        if(user.getRol()==Rol.ADMIN) {
             return Mapper.orderToResponseDTO(
                     orderRepository.findById(orderId)
-                            .orElseThrow(() -> new EntityNotFoundException(
-                                "Order with ID: " + orderId + " not found")));
+                            .orElseThrow(() -> new ResourceNotFoundException("Order","id", orderId)));
         }
 
         List<Order> ordenList = orderRepository.findAllByUser(user);
@@ -73,8 +73,7 @@ public class OrderService implements IOrderService{
                 .filter(order -> order.getId().equals(orderId))
                 .map(Mapper::orderToResponseDTO)
                 .findFirst()
-                .orElseThrow(() -> new EntityNotFoundException(
-                "Order with ID: " + orderId + " not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Order","id",orderId));
     }
 
     @Override
@@ -95,7 +94,7 @@ public class OrderService implements IOrderService{
     public OrderResponseDto updateOrderState(Long id, OrderStatusUpdateDto request) {
 
         Order order = orderRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Order with ID: "+ id + " not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Order","id",id));
 
         order.setStatus(request.getStatus());
 
@@ -109,13 +108,13 @@ public class OrderService implements IOrderService{
     private Cart getCart (String userEmail) {
 
         User user = userRepository.findByEmail(userEmail)
-                .orElseThrow(() -> new EntityNotFoundException("User not found."));
+                .orElseThrow(() -> new ResourceNotFoundException("User", "email", userEmail));
 
         Cart cart = cartRepository.findByUser(user)
-                .orElseThrow(() -> new EntityNotFoundException("The user doesn't have a cart"));
+                .orElseThrow(() -> new ResourceNotFoundException("Cart", "userEmail", userEmail));
 
         if(cart.getItems().isEmpty()) {
-            throw new RuntimeException("Cart doesn't have items!");
+            throw new EmptyCartException();
         }
 
         return cart;

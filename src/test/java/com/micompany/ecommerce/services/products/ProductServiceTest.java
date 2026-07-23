@@ -2,20 +2,17 @@ package com.micompany.ecommerce.services.products;
 
 import com.micompany.ecommerce.dto.products.ProductRequestDto;
 import com.micompany.ecommerce.dto.products.ProductResponseDto;
+import com.micompany.ecommerce.exceptions.ResourceNotFoundException;
 import com.micompany.ecommerce.models.entities.Category;
 import com.micompany.ecommerce.models.entities.Product;
 import com.micompany.ecommerce.repositories.CategoryRepository;
 import com.micompany.ecommerce.repositories.ProductRepository;
-import jakarta.persistence.EntityNotFoundException;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
@@ -35,248 +32,242 @@ class ProductServiceTest {
     @InjectMocks
     private ProductService productService;
 
-
-    @BeforeEach
-    void setUp() {
-    }
-
-    // =============== Pruebas metodo getList() =============
     @Test
-    void getList_debeRetornarListaCompleta_cuandoIdCategoriaEsNull() {
+    void getList_debeRetornarListaCompleta_cuandoCategoriaEsNull() {
 
-        // Arrange
-        Category category1 = new Category();
-        category1.setName("Deportes");
-        Category category2 = new Category();
-        category2.setName("Juguetes");
+        Category category1 = category(1L, "Deportes");
+        Category category2 = category(2L, "Tecnología");
 
-        Product product1 = new Product();
-        product1.setCategory(category1);
-        Product product2 = new Product();
-        product2.setCategory(category2);
+        Product product1 = product(1L, category1);
+        Product product2 = product(2L, category2);
 
-        List<Product> listProducts = new ArrayList<>();
-        listProducts.add(product1);
-        listProducts.add(product2);
+        when(productRepository.findAll())
+                .thenReturn(List.of(product1, product2));
 
-        when(productRepository.findAll()).thenReturn(listProducts);
+        List<ProductResponseDto> result =
+                productService.getList(null);
 
-        // Act
-        List<ProductResponseDto> result = productService.getList(null);
-
-        // Assert
         assertEquals(2, result.size());
-
     }
 
     @Test
-    void getList_debeRetornarLista_cuandoFiltroCategoriaNoEsNull(){
+    void getList_debeFiltrarPorCategoria() {
 
-        // Arrange
-        Category category1 = new Category();
-        category1.setName("Deportes");
-        category1.setId(1L);
+        Category category1 = category(1L, "Deportes");
+        Category category2 = category(2L, "Tecnología");
 
-        Category category2 = new Category();
-        category2.setName("Juguetes");
-        category2.setId(2L);
+        Product product1 = product(1L, category1);
+        Product product2 = product(2L, category2);
 
-        Product product1 = new Product();
-        product1.setCategory(category1);
-        Product product2 = new Product();
-        product2.setCategory(category2);
+        when(productRepository.findAll())
+                .thenReturn(List.of(product1, product2));
 
-        List<Product> listProducts = new ArrayList<>();
-        listProducts.add(product1);
-        listProducts.add(product2);
+        List<ProductResponseDto> result =
+                productService.getList(1L);
 
-        when(productRepository.findAll()).thenReturn(listProducts);
-
-        // Act
-        List<ProductResponseDto> result = productService.getList(1L);
-
-        // Assert
         assertEquals(1, result.size());
-
+        assertEquals(1L, result.get(0).getCategoryId());
     }
 
-    // ============== Pruebas metodo getProduct() ==============
     @Test
     void getProduct_debeDarError_cuandoProductoNoExiste() {
 
-        // Arrange
-        when(productRepository.findById(99L)).thenReturn(Optional.empty());
+        when(productRepository.findById(99L))
+                .thenReturn(Optional.empty());
 
-        // Act & Assert
-        assertThrows(EntityNotFoundException.class, () -> {
-           productService.getProduct(99L);
-        });
+        ResourceNotFoundException exception = assertThrows(
+                ResourceNotFoundException.class,
+                () -> productService.getProduct(99L)
+        );
 
+        assertEquals("Product", exception.getResourceName());
+        assertEquals("id", exception.getFieldName());
+        assertEquals(99L, exception.getFieldValue());
     }
 
     @Test
     void getProduct_debeDevolverProducto_cuandoExiste() {
 
-        // Arrange
-        Category category = new Category();
-        category.setName("Deportes");
-        category.setId(1L);
+        Category category = category(1L, "Deportes");
+        Product product = product(1L, category);
 
-        Product product = new Product();
-        product.setId(1L);
-        product.setCategory(category);
+        when(productRepository.findById(1L))
+                .thenReturn(Optional.of(product));
 
+        ProductResponseDto result =
+                productService.getProduct(1L);
 
-        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
-
-        // Act
-        ProductResponseDto result = productService.getProduct(1L);
-
-        // Assert
         assertNotNull(result);
         assertEquals(1L, result.getId());
-
+        assertEquals(1L, result.getCategoryId());
     }
 
-    // =========== Pruebas metodo createProduct() ===============
     @Test
     void createProduct_debeDarError_cuandoCategoriaNoExiste() {
 
-        // Arrange
-        ProductRequestDto requestDto = new ProductRequestDto();
-        requestDto.setCategoryId(99L);
+        ProductRequestDto request = productRequest(99L);
 
-        when(categoryRepository.existsById(99L)).thenReturn(false);
+        when(categoryRepository.findById(99L))
+                .thenReturn(Optional.empty());
 
-        // Act & Assert
-        assertThrows(EntityNotFoundException.class, () -> {
+        ResourceNotFoundException exception = assertThrows(
+                ResourceNotFoundException.class,
+                () -> productService.createProduct(request)
+        );
 
-            productService.createProduct(requestDto);
+        assertEquals("Category", exception.getResourceName());
+        assertEquals(99L, exception.getFieldValue());
 
-        });
+        verify(productRepository, never())
+                .save(any(Product.class));
     }
 
     @Test
-    void createProduct_debeCrearProducto_cuandoDatosSonCorrectos() {
+    void createProduct_debeCrearProducto() {
 
-        // Arrange
-        Category category = new Category();
-        category.setId(1L);
+        Category category = category(1L, "Deportes");
+        ProductRequestDto request = productRequest(1L);
 
-        ProductRequestDto requestDto = new ProductRequestDto();
-        requestDto.setCategoryId(1L);
+        when(categoryRepository.findById(1L))
+                .thenReturn(Optional.of(category));
 
-        Product product = new Product();
-        product.setId(1L);
-        product.setCategory(category);
+        when(productRepository.save(any(Product.class)))
+                .thenAnswer(invocation -> {
 
-        when(categoryRepository.existsById(1L)).thenReturn(true);
-        when(categoryRepository.findById(1L)).thenReturn(Optional.of(category));
-        when(productRepository.save(any(Product.class))).thenReturn(product);
+                    Product savedProduct = invocation.getArgument(0);
+                    savedProduct.setId(1L);
 
-        // Act
-        ProductResponseDto result = productService.createProduct(requestDto);
+                    return savedProduct;
+                });
 
-        // Assert
+        ProductResponseDto result =
+                productService.createProduct(request);
+
         assertNotNull(result);
+        assertEquals(1L, result.getId());
         assertEquals(1L, result.getCategoryId());
-
+        assertEquals("Notebook", result.getName());
     }
-
-    // =========== Pruebas metodo updateProduct() ===============
 
     @Test
     void updateProduct_debeDarError_cuandoProductoNoExiste() {
 
-        // Arrange
-        when(productRepository.findById(1L)).thenReturn(Optional.empty());
-        ProductRequestDto requestDto = new ProductRequestDto();
+        ProductRequestDto request = productRequest(1L);
 
-        // Act & Assert
-        assertThrows(EntityNotFoundException.class, () -> {
+        when(productRepository.findById(99L))
+                .thenReturn(Optional.empty());
 
-            productService.updateProduct(1L,requestDto);
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> productService.updateProduct(99L, request)
+        );
 
-        });
-
+        verifyNoInteractions(categoryRepository);
     }
 
     @Test
     void updateProduct_debeDarError_cuandoCategoriaNoExiste() {
 
-        // Arrange
-        ProductRequestDto requestDto = new ProductRequestDto();
-        requestDto.setCategoryId(99L);
+        Category currentCategory = category(1L, "Anterior");
+        Product currentProduct = product(1L, currentCategory);
+        ProductRequestDto request = productRequest(99L);
 
-        when(productRepository.findById(1L)).thenReturn(Optional.of(new Product()));
-        when(categoryRepository.existsById(99L)).thenReturn(false);
+        when(productRepository.findById(1L))
+                .thenReturn(Optional.of(currentProduct));
 
-        // Act & Assert
-        assertThrows(EntityNotFoundException.class, () -> {
-            productService.updateProduct(1L, requestDto);
-        });
+        when(categoryRepository.findById(99L))
+                .thenReturn(Optional.empty());
+
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> productService.updateProduct(1L, request)
+        );
+
+        verify(productRepository, never())
+                .save(any(Product.class));
     }
 
     @Test
-    void updateProduct_debeActualizarProducto_cuandoDatosSonCorrectos() {
+    void updateProduct_debeActualizarProducto() {
 
-        // Arrange
+        Category oldCategory = category(1L, "Anterior");
+        Category newCategory = category(2L, "Nueva");
 
-        Category category = new Category();
-        category.setId(1L);
-        Category category2 = new Category();
-        category2.setId(2L);
+        Product currentProduct = product(1L, oldCategory);
+        ProductRequestDto request = productRequest(2L);
 
-        // ProductRequest con datos actualizados
-        ProductRequestDto requestDto = new ProductRequestDto();
-        requestDto.setCategoryId(category2.getId());
+        when(productRepository.findById(1L))
+                .thenReturn(Optional.of(currentProduct));
 
-        // Producto actual
-        Product product = new Product();
-        product.setId(1L);
-        product.setCategory(category);
+        when(categoryRepository.findById(2L))
+                .thenReturn(Optional.of(newCategory));
 
-        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
-        when(categoryRepository.existsById(2L)).thenReturn(true);
-        when(categoryRepository.findById(2L)).thenReturn(Optional.of(category2));
-        when(productRepository.save(any(Product.class))).thenReturn(product);
+        when(productRepository.save(currentProduct))
+                .thenReturn(currentProduct);
 
-        // Act
-        ProductResponseDto result = productService.updateProduct(1L, requestDto);
+        ProductResponseDto result =
+                productService.updateProduct(1L, request);
 
-        // Assert
-        assertNotNull(result);
+        assertEquals("Notebook", result.getName());
         assertEquals(2L, result.getCategoryId());
-
+        assertEquals(1000.0, result.getPrice());
+        assertEquals(10, result.getStock());
     }
 
-    // ============== Pruebas metodo deleteProduct() ===========
     @Test
     void deleteProduct_debeDarError_cuandoProductoNoExiste() {
 
-        // Arrange
-        when(productRepository.existsById(99L)).thenReturn(false);
+        when(productRepository.existsById(99L))
+                .thenReturn(false);
 
-        // Act & Assert
-        assertThrows(EntityNotFoundException.class, () -> {
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> productService.deleteProduct(99L)
+        );
 
-            productService.deleteProduct(99L);
-
-        });
+        verify(productRepository, never()).deleteById(anyLong());
     }
 
     @Test
     void deleteProduct_debeEliminarProducto_cuandoExiste() {
 
-        // Arrange
-        when(productRepository.existsById(1L)).thenReturn(true);
-        doNothing().when(productRepository).deleteById(1L);
+        when(productRepository.existsById(1L))
+                .thenReturn(true);
 
-        // Act
         productService.deleteProduct(1L);
 
-        // Assert
-        verify(productRepository, times(1)).deleteById(1L);
+        verify(productRepository).deleteById(1L);
+    }
 
+    private Category category(Long id, String name) {
+
+        Category category = new Category();
+        category.setId(id);
+        category.setName(name);
+
+        return category;
+    }
+
+    private Product product(Long id, Category category) {
+
+        Product product = new Product();
+        product.setId(id);
+        product.setName("Notebook");
+        product.setPrice(1000.0);
+        product.setStock(10);
+        product.setCategory(category);
+
+        return product;
+    }
+
+    private ProductRequestDto productRequest(Long categoryId) {
+
+        ProductRequestDto request = new ProductRequestDto();
+        request.setName("Notebook");
+        request.setPrice(1000.0);
+        request.setStock(10);
+        request.setCategoryId(categoryId);
+
+        return request;
     }
 }

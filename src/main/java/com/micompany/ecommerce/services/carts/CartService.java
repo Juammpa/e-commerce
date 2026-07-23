@@ -2,6 +2,9 @@ package com.micompany.ecommerce.services.carts;
 
 import com.micompany.ecommerce.dto.carts.CartItemRequestDto;
 import com.micompany.ecommerce.dto.carts.CartResponseDto;
+import com.micompany.ecommerce.exceptions.InsufficientStockException;
+import com.micompany.ecommerce.exceptions.InvalidQuantityException;
+import com.micompany.ecommerce.exceptions.ResourceNotFoundException;
 import com.micompany.ecommerce.mappers.Mapper;
 import com.micompany.ecommerce.models.entities.Cart;
 import com.micompany.ecommerce.models.entities.CartItem;
@@ -10,7 +13,6 @@ import com.micompany.ecommerce.models.entities.User;
 import com.micompany.ecommerce.repositories.CartRepository;
 import com.micompany.ecommerce.repositories.ProductRepository;
 import com.micompany.ecommerce.repositories.UserRepository;
-import jakarta.persistence.EntityNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,33 +41,52 @@ public class CartService implements ICartService {
     @Transactional
     public CartResponseDto addCartItem(String userEmail, CartItemRequestDto request) {
 
-        // 1. Obtener el carrito del usuario
+        // Valida la cantidad ingresada
+        validateQuantity(request.getQuantity());
+
+        // Obtener el carrito del usuario
         Cart cart = getOrCreateCart(userEmail);
 
-        // 2. Validar que el producto exista
+        // Validar que el producto exista
         Product product = productRepository.findById(request.getProductId())
-                .orElseThrow(() -> new EntityNotFoundException("Product with ID: " + request.getProductId() + " not found."));
+                .orElseThrow(() -> new ResourceNotFoundException("Product","id", request.getProductId()));
 
-        // 3. Lógica de negocio: ¿El producto ya está en el carrito?
+        // Lógica de negocio: ¿El producto ya está en el carrito?
         Optional<CartItem> existingItem = cart.getItems().stream()
                 .filter(item -> item.getProduct().getId().equals(product.getId()))
                 .findFirst();
 
+        // Obtenemos el valor de la cantidad total
+        int resultingQuantity = existingItem
+                .map(item ->
+                        item.getQuantity() + request.getQuantity()
+                )
+                .orElse(request.getQuantity());
+
+        // Validamos stock
+        if (product.getStock() < resultingQuantity) {
+            throw new InsufficientStockException(
+                    product.getId(),
+                    product.getName(),
+                    resultingQuantity,
+                    product.getStock()
+            );
+        }
+
         if(existingItem.isPresent()) {
-            // Si ya existe, solo sumamos la cantidad
-            CartItem item = existingItem.get();
-            item.setQuantity(item.getQuantity() + request.getQuantity());
+            // Si ya existe, actualizamos la cantidad
+            existingItem.get().setQuantity(resultingQuantity);
         } else {
             // Si no existe, creamos un nuevo item y lo asociamos al carrito
             CartItem newItem = new CartItem();
             newItem.setCart(cart);
             newItem.setProduct(product);
-            newItem.setQuantity(request.getQuantity());
+            newItem.setQuantity(resultingQuantity);
             cart.getItems().add(newItem);
         }
 
-        // 4. Guardar en BD (Gracias a CascadeType.ALL, guardará los items automáticamente)
-        // 5. Retornar el DTO mapeado
+        // Guardar en BD (Gracias a CascadeType.ALL, guardará los items automáticamente)
+        // Retornar el DTO mapeado
         return Mapper.cartToResponseDTO(cartRepository.save(cart));
 
     }
@@ -73,18 +94,22 @@ public class CartService implements ICartService {
     @Override
     @Transactional
     public CartResponseDto updateCartQuantity(String userEmail, Long id, Integer quantity) {
-        // 1. Obtener el carrito del usuario
+
+        // Valida la cantidad ingresada
+        validateQuantity(quantity);
+
+        // Obtener el carrito del usuario
         Cart cart = getOrCreateCart(userEmail);
 
-        // 2. Buscar el item específico dentro de ese carrito
+        // Buscar el item específico dentro de ese carrito
         CartItem item = cart.getItems().stream()
                 .filter(i -> i.getId().equals(id))
                 .findFirst()
-                .orElseThrow(() -> new EntityNotFoundException("Item with ID: " + id + " not found."));
+                .orElseThrow(() -> new ResourceNotFoundException("Item", "id", id));
 
         // 3. Validar stock (Requisito funcional del PDF)
         if(item.getProduct().getStock() < quantity) {
-            throw new RuntimeException("Insuficient stock for product: " + item.getProduct().getName());
+            throw new InsufficientStockException(item.getProduct().getId(),item.getProduct().getName(),quantity,item.getProduct().getStock());
         }
 
         // 4. Actualizar cantidad y guardar
@@ -101,7 +126,7 @@ public class CartService implements ICartService {
         boolean removed = cart.getItems().removeIf(item -> item.getId().equals(itemId));
 
         if (!removed) {
-            throw new EntityNotFoundException("Item not found in cart");
+            throw new ResourceNotFoundException("Item", "id", itemId);
         }
 
         return Mapper.cartToResponseDTO(cartRepository.save(cart));
@@ -126,14 +151,26 @@ public class CartService implements ICartService {
     private Cart getOrCreateCart(String userEmail) {
 
         User user = userRepository.findByEmail(userEmail).
-                orElseThrow(() -> new EntityNotFoundException(
-                        "User with email: " + userEmail + " not found."));
+                orElseThrow(() -> new ResourceNotFoundException("User", "email", userEmail));
 
         return cartRepository.findByUser(user).orElseGet(() -> {
             Cart newCart = new Cart();
             newCart.setUser(user);
             return cartRepository.save(newCart);
         });
+    }
+
+    /*
+     * Impide utilizar cantidades nulas, iguales a cero o negativas.
+     *
+     * Esta validación pertenece al servicio porque el servicio podría
+     * ser invocado desde un lugar distinto al controlador.
+     */
+    private void validateQuantity(Integer quantity) {
+
+        if (quantity == null || quantity <= 0) {
+            throw new InvalidQuantityException(quantity);
+        }
     }
 
 

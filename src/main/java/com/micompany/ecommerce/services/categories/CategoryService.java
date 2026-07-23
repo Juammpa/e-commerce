@@ -2,10 +2,10 @@ package com.micompany.ecommerce.services.categories;
 
 import com.micompany.ecommerce.dto.categories.CategoryRequestDto;
 import com.micompany.ecommerce.dto.categories.CategoryResponseDto;
+import com.micompany.ecommerce.exceptions.ResourceNotFoundException;
 import com.micompany.ecommerce.mappers.Mapper;
 import com.micompany.ecommerce.models.entities.Category;
 import com.micompany.ecommerce.repositories.CategoryRepository;
-import jakarta.persistence.EntityNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -41,7 +41,7 @@ public class CategoryService implements ICategoryService{
     public CategoryResponseDto updateCategory(Long id, CategoryRequestDto request) {
 
         Category category = categoryRepository.findById(id)
-                        .orElseThrow(() -> new EntityNotFoundException("Category with ID: " + id + " not found"));
+                        .orElseThrow(() -> new ResourceNotFoundException("Category","id", id));
 
         category.setName(request.getName());
         category.setDescription(request.getDescription());
@@ -54,7 +54,7 @@ public class CategoryService implements ICategoryService{
     public void deleteCategory(Long id) {
 
         if(!categoryRepository.existsById(id)) {
-            throw new EntityNotFoundException("Category with ID: " + id + "not exists");
+            throw new ResourceNotFoundException("Category","id", id);
         }
 
         categoryRepository.deleteById(id);
